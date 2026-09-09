@@ -1,0 +1,28 @@
+name: Docs Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run documentation checks
+        run: |
+          python scripts/check-docs.py
+          python scripts/check-links.py --no-external
+          python scripts/test-link-checkers.py
+
+      - name: Run Git learning labs
+        run: bash scripts/run-git-learning-labs.sh

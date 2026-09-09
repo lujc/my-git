@@ -8,6 +8,28 @@
 
 不同答案，处理方式完全不同。
 
+## 急救决策树
+
+| 当前状态 | 先做什么 | 推荐处理 | 避免什么 |
+| --- | --- | --- | --- |
+| 代码还没提交 | `git status`、必要时 `git stash push -u` | 用 `git restore`、`git stash`、手工移动文件保留现场 | 直接 `git reset --hard` |
+| 已提交，还没 push | `git log --oneline -5`、`git reflog -10` | 可以用 `reset`、`commit --amend`、`rebase -i` 整理本地历史 | 整理前不留备份分支 |
+| 已 push，但没人基于它开发 | 先确认远端分支和团队状态 | 优先 `git revert`，确实要整理历史时先沟通再 `push --force-with-lease` | 直接 `push --force` |
+| 已 push，且有人基于它开发 | 先通知协作者，确认影响范围 | 用新 commit 修正，公共分支优先 `revert` | 改写公共历史 |
+| secret 已经提交 | 立即废弃并轮换 secret | 再清理 Git 历史和平台缓存 | 只做 revert 就结束 |
+| force push 覆盖远端 | 找到仍保留正确提交的人或本地 reflog | 用正确 commit 恢复远端分支 | 继续在错误分支上叠加提交 |
+
+如果不确定自己属于哪一类，先只执行只读命令：
+
+```bash
+git status
+git log --oneline --decorate -10
+git reflog -10
+git branch -vv
+```
+
+不要急着执行会改写工作区或历史的命令。
+
 ## 修复前先保留现场
 
 先保存现场：
@@ -18,26 +40,30 @@ git log --oneline --decorate -10
 git reflog -10
 ```
 
-如果工作区还有未提交代码，先临时保存：
+如果工作区还有未提交代码，先确认全部内容都属于自己并准备稍后恢复，才可临时保存：
 
 ```bash
 git stash push -u -m "backup-before-recovery"
 ```
 
+状态中有其他 owner 的编辑或来源不清的未跟踪文件时，停止在这个工作区操作，保留现场或使用独立 worktree。
+
 ## 场景 1：commit 提交到了错误分支
 
 ### 现象
 
-你在 `main` 上提交了本来应该在 feature 分支里的 commit。
+你在名为 `main` 的分支上提交了本来应该在 feature 分支里的 commit。`main` 是示例，实际以检查到的错误分支名为准。
 
 ### 先检查
 
 ```bash
-git status
+git status --porcelain
 git log --oneline -5
 ```
 
 ### 安全处理：还没 push
+
+以下流程只适用于最后一个 commit 尚未 push、没有协作者依赖，并且 `git status --porcelain` 没有输出的情况。有 staged、unstaged 或 untracked 内容时，停止在 reset 前并保留现场。
 
 ```bash
 git branch feat/right-branch
@@ -74,17 +100,15 @@ git reflog
 
 ### 恢复方式
 
-找到 reset 前的位置：
+找到 reset 前的位置后，先确认工作区干净并保留当前位置，再恢复：
 
 ```bash
+git status --porcelain
+git branch backup-before-recover HEAD
 git reset --hard HEAD@{1}
 ```
 
-如果不确定，先创建备份分支：
-
-```bash
-git branch backup-before-recover HEAD@{1}
-```
+`git status --porcelain` 有输出时停止。`HEAD@{1}` 必须来自刚才检查的 reflog 条目，不能按位置猜测。
 
 ## 场景 3：commit 丢了
 
@@ -115,7 +139,7 @@ git revert <commit-sha>
 
 优先用 revert，因为它不会改写公共历史。
 
-### If the commit includes secret
+### 如果 commit 里包含 secret
 
 不要只 revert。
 
@@ -130,19 +154,19 @@ git reflog
 git log --oneline --decorate -10
 ```
 
-让仍保留旧提交的同事执行：
+`<integration-branch>` 是被覆盖的实际集成分支名，例如 `main`、`master` 或 `develop`。让仍保留旧提交的同事执行：
 
 ```bash
-git log --oneline origin/main -10
+git log --oneline origin/<integration-branch> -10
 git reflog -10
 ```
 
 ### 恢复远端分支
 
-找到正确 commit 后：
+找到正确 commit、确认远端权限和分支规则，并得到相关 owner 的授权后：
 
 ```bash
-git push origin <good-sha>:main
+git push origin <good-sha>:<integration-branch>
 ```
 
 如果分支受保护，需要管理员或平台 owner 处理。
@@ -196,8 +220,12 @@ git rebase --continue
 
 ```bash
 git reflog
+git status --porcelain
+git branch backup-before-rebase-recover HEAD
 git reset --hard <before-rebase-sha>
 ```
+
+这里同样要求 `git status --porcelain` 没有输出，`<before-rebase-sha>` 来自已检查的 reflog，不能使用猜测的提交。
 
 ## 场景 9：撤销公共 commit
 
@@ -214,29 +242,44 @@ git revert <commit-sha>
 ### 先看会删除什么
 
 ```bash
-git status
+git status --porcelain
 git clean -nd
 ```
 
+`git clean -nd` 只列出候选文件，不能证明它们可以删除。
+
 ### 删除未跟踪文件
 
+确认路径是 owner 授权丢弃的未跟踪文件后，精确指定路径：
+
 ```bash
-git clean -fd
+git clean -f -- <owned-untracked-path>
 ```
 
 ### 丢弃已跟踪文件改动
 
+确认路径归属、预期基线和授权后：
+
 ```bash
-git restore <file>
+git restore --worktree -- <owned-tracked-path>
 ```
 
 ### 高风险操作
 
+先运行：
+
 ```bash
-git reset --hard
+git status --porcelain
 ```
 
-执行前确认没有需要保留的本地改动。
+`git status --porcelain` 有输出时停止。只有工作区干净、`<verified-ref>` 已核实且本地历史允许重写时，才保留当前位置并执行 reset：
+
+```bash
+git branch backup-before-hard-reset HEAD
+git reset --hard <verified-ref>
+```
+
+出现任何需要保留的 staged、unstaged 或 untracked 内容时，停止，不执行广泛的 restore、clean 或 reset。
 
 ## 快速判断表
 

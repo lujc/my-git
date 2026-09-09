@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<title>理解 Git，才能决定如何使用它 | My Git</title>
+<meta name="description" content="从三个可交互实验理解 Git 的快照、对象与提交草稿。让理解支撑判断。">
+<link rel="stylesheet" href="reading.css"><script src="reading.js" defer></script>
+</head><body>
+<a class="skip" href="#reading" data-en="Skip to reading">跳到正文</a>
+<header class="site-nav"><a class="brand" href="https://github.com/xirong/my-git"><span>↳</span> My Git Handbook</a><button class="language" type="button" aria-label="Switch language / 切换语言">English</button></header>
+<main id="reading">
+<p class="eyebrow" data-en="Git mental models">理解 Git 的设计</p>
+<h1 data-en="Understand Git. Know what to trust.">理解 Git，才能决定如何使用它。</h1>
+<p class="intro" data-en="An agent can run the commands. Understanding helps you see the choices, question the result, and recover when things go wrong.">Agent 可以代劳命令。理解让你看见选择，判断结果，并在出错时找到恢复的方向。</p>
+<p data-en="Start with one file. Predict what will change, play the sequence, then check your explanation. These experiments connect Git’s design to decisions you make with an agent.">从一个文件开始。先猜会发生什么，再播放过程，最后检查自己的解释。下面三个实验，把 Git 的设计和你与 Agent 协作时的判断连在一起。</p>
+<nav class="contents" aria-label="Contents / 本页目录">
+<a href="#snapshots"><span>01</span><b data-en="Which version did you actually commit?">你到底提交了哪个版本？</b></a>
+<a href="#objects"><span>02</span><b data-en="How does a name lead to a file?">一个名字，如何找到一份内容？</b></a>
+<a href="#draft"><span>03</span><b data-en="What belongs in the next commit?">哪些改动应该一起提交？</b></a>
+</nav>
+<section class="chapter" id="snapshots">
+<h2 data-en="Saving a file is not making history.">保存了文件，就进入历史了吗？</h2>
+<p data-en="You edit a file, stage it, then edit it again. Which version will a plain git commit record? Watch the three locations below. Each has its own role.">你改了一个文件，暂存它，又继续改了一次。此时执行普通的 git commit，会记录哪一个版本？观察下面三个位置，它们各有职责。</p>
+<div class="experiment" data-experiment="snapshots"><p data-en="Enable JavaScript for the animation, or use the article and lab below.">启用 JavaScript 可操作动画；也可以直接阅读下方文章和实验。</p></div>
+<p data-en="HEAD identifies the current commit. The index describes the next snapshot. The working tree is where you edit. A staged version stays put until you explicitly stage something else.">HEAD 标识当前提交，Index 描述下一份快照，工作区是你正在编辑的文件。已经暂存的版本，会一直保留到你再次更新 Index。</p>
+<details class="question"><summary data-en="Predict: the file says version=3. What does the new commit contain?">想一想：文件已经是 version=3，新提交里是什么？</summary><p data-en="version=2. That was the staged content. The later edit stays in the working tree. An agent saying “saved” does not establish what is recoverable from a commit.">是 version=2，因为暂存的是这个版本。后续编辑仍留在工作区。Agent 说“已保存”，还不足以证明哪些内容能从提交中恢复。</p></details>
+<div class="links"><a href="https://xirong.github.io/my-git/01-getting-started/git-mental-model-01-snapshots.html" data-link-en="https://xirong.github.io/my-git/01-getting-started/01-getting-started_en/git-mental-model-01-snapshots_en.html" data-en="Read the explanation ↗">阅读完整讲解 ↗</a><a href="https://github.com/xirong/my-git/tree/master/labs/git-mental-model/01-snapshots-and-state" data-en="Run the lab ↗">在临时仓库验证 ↗</a><a href="snapshots-and-state.html" data-en="Explore all states ↗">深入检查所有状态 ↗</a></div>
+</section>
+<section class="chapter" id="objects">
+<h2 data-en="A name is the beginning of a lookup.">一个名字，如何找到一份内容？</h2>
+<p data-en="A branch stores a commit ID. That commit refers to a root tree. Tree entries connect names to trees or blobs. Each read reveals the next object to inspect.">分支保存一个 commit ID，commit 引用根 tree，tree 的条目把名字连到下一层 tree 或 blob。顺着这条路径，每读到一个对象，才知道接下来去哪里找。</p>
+<div class="experiment" data-experiment="graph"><p data-en="Enable JavaScript for the animation, or read the linked article.">启用 JavaScript 可操作动画；也可以阅读下方文章。</p></div>
+<p data-en="Choose the other filename. Both entries point to B1: different paths can share the same content. A blob has no filename. This is an object graph; physical storage can also involve compression and deltas.">试着改选另一个文件。两个条目都指向 B1：不同路径可以共享相同内容。blob 不保存文件名。图里画的是对象关系，实际磁盘存储还可能使用压缩和差量编码。</p>
+<details class="question"><summary data-en="Predict: does deleting main immediately erase the snapshot?">想一想：删掉 main，会立刻抹掉快照吗？</summary><p data-en="Deleting a branch removes a reference. Other refs or reflogs may retain the commit. Recovery depends on reachability and retention; unreachable objects are not guaranteed to remain forever.">删除分支移除的是引用。其他引用或 reflog 可能仍保留该提交。能否恢复取决于可达性和保留情况；不可达对象不会被承诺永久保存。</p></details>
+<div class="links"><a href="object-graph-cinematic.html" data-demo-link data-en="Focused walkthrough ↗">单独打开对象查找 ↗</a><a href="object-graph.html" data-en="Inspect objects ↗">逐对象检查 ↗</a><a href="https://xirong.github.io/my-git/01-getting-started/git-mental-model-02-object-graph.html" data-link-en="https://xirong.github.io/my-git/01-getting-started/01-getting-started_en/git-mental-model-02-object-graph_en.html" data-en="Read the explanation ↗">阅读完整讲解 ↗</a><a href="https://github.com/xirong/my-git/tree/master/labs/git-mental-model/02-object-graph" data-en="Run the lab ↗">运行对象实验 ↗</a></div>
+</section>
+<section class="chapter" id="draft">
+<h2 data-en="One file can contain two intentions.">一个文件，也可以有两种意图。</h2>
+<p data-en="An agent fixes a timeout and also enables debug logging. You want the fix alone. The index lets you select changes within a file and review the exact draft before committing it.">Agent 修复了超时配置，又顺手打开调试日志。你只想接受修复。Index 让你在同一个文件里选择改动，并在提交前检查完整草稿。</p>
+<div class="experiment" data-experiment="index"><p data-en="Enable JavaScript for the animation, or read the linked article.">启用 JavaScript 可操作动画；也可以阅读下方文章。</p></div>
+<p data-en="The draft contains the whole file, including unchanged settings. Partial staging chooses which edits enter it. Inspect git diff --cached to see what the next commit changes relative to HEAD.">草稿里包含整个文件，也包含没改过的配置。部分暂存决定哪些编辑进入这份草稿。在真实仓库中，用 git diff --cached 检查下一次提交相对 HEAD 到底改了什么。</p>
+<details class="question"><summary data-en="Predict: after unstaging debug logging, is your edit lost?">想一想：取消调试改动的暂存，会丢掉编辑吗？</summary><p data-en="No. git restore --staged updates the index and leaves the working tree alone. You can keep the edit for a separate decision. Restoring the working-tree file is a different operation.">不会。git restore --staged 更新 Index，工作区保持不变。你可以保留这处编辑，另做决定。恢复工作区文件是另一种操作，风险也不同。</p></details>
+<div class="links"><a href="index-as-draft.html" data-en="Partial staging and conflict stages ↗">深入部分暂存与冲突 stages ↗</a><a href="https://xirong.github.io/my-git/01-getting-started/git-mental-model-03-index.html" data-link-en="https://xirong.github.io/my-git/01-getting-started/01-getting-started_en/git-mental-model-03-index_en.html" data-en="Read the explanation ↗">阅读完整讲解 ↗</a><a href="https://github.com/xirong/my-git/tree/master/labs/git-mental-model/03-index" data-en="Run the lab ↗">运行 Index 实验 ↗</a></div>
+</section>
+<section class="course-continuation" aria-labelledby="continue-title">
+<h2 id="continue-title" data-en="Continue through the full model.">继续走完整条心智模型。</h2>
+<p data-en="The next seven chapters keep the same reading rhythm: make a prediction, change one condition, play five states, then verify it in a disposable Git lab.">后七章延续同一种阅读节奏：先预测，改变一个条件，播放五步状态，再到可删除的 Git 实验中验证。</p>
+<div class="course-groups">
+<nav class="course-group" aria-label="History and collaboration"><h3 data-en="HISTORY AND COLLABORATION">历史与协作</h3>
+<a href="refs-and-head.html" data-demo-link><span>04</span><b data-en="Refs and HEAD">引用与 HEAD</b></a>
+<a href="reachability-and-recovery.html" data-demo-link><span>05</span><b data-en="Reachability and recovery">可达性与恢复</b></a>
+<a href="three-way-merge.html" data-demo-link><span>06</span><b data-en="Three-way merge">三方合并</b></a>
+<a href="rebase-and-replay.html" data-demo-link><span>07</span><b data-en="Rebase and replay">Rebase 与重放</b></a>
+<a href="remote-and-fetch.html" data-demo-link><span>08</span><b data-en="Remote and fetch">远端与 Fetch</b></a>
+</nav>
+<nav class="course-group" aria-label="Isolation and storage"><h3 data-en="ISOLATION AND STORAGE">隔离与存储</h3>
+<a href="worktree-and-isolation.html" data-demo-link><span>09</span><b data-en="Worktree and isolation">Worktree 与隔离</b></a>
+<a href="storage-and-maintenance.html" data-demo-link><span>10</span><b data-en="Storage and maintenance">存储与维护</b></a>
+</nav>
+</div>
+</section>
+<section class="next-reading">
+<h2 data-en="Turn understanding into a decision.">把理解，带回真实工程。</h2>
+<p data-en="Before accepting an agent’s changes, ask what belongs in the commit, which revision was tested, and what recovery can restore. Git records versions; tests, review, permissions, and release systems complete change control.">接受 Agent 的改动前，问清提交边界、验证版本和恢复范围。Git 记录版本；测试、审查、权限和发布系统共同构成变更控制。</p>
+<a href="https://github.com/xirong/my-git/blob/master/01-getting-started/why-learn-git.md" data-link-en="https://github.com/xirong/my-git/blob/master/01-getting-started/01-getting-started_en/why-learn-git_en.md"><b data-en="Why learn when AI can do the work?">AI 会操作，人为什么还要学？</b><span data-en="The idea behind this handbook ↗">这个仓库的出发点 ↗</span></a>
+<a href="https://github.com/xirong/my-git/blob/master/01-getting-started/git-learning-path.md" data-link-en="https://github.com/xirong/my-git/blob/master/01-getting-started/01-getting-started_en/git-learning-path_en.md"><b data-en="The complete learning path">完整学习路径</b><span data-en="Concepts, practice, and gaps ↗">原理、实践与待补全内容 ↗</span></a>
+<a href="https://github.com/xirong/my-git/blob/master/05-ai-native-development/ai-change-control-loop.md" data-link-en="https://github.com/xirong/my-git/blob/master/05-ai-native-development/05-ai-native-development_en/ai-change-control-loop_en.md"><b data-en="Accept an agent change, end to end">走完一次 Agent 变更验收</b><span data-en="Intent → evidence → decision ↗">意图 → 证据 → 判断 ↗</span></a>
+</section>
+<noscript><style>.language{display:none}</style></noscript>
+</main><footer><a href="https://github.com/xirong/my-git" data-en="Back to the handbook">返回手册</a><span data-en="Learn the design. Keep your judgment.">理解设计，保有判断。</span></footer>
+</body></html>

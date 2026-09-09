@@ -2,22 +2,24 @@
 
 AI 让写代码变便宜，但让验证代码变贵。
 
-Git 在 AI 编程时代的新价值，是把 AI 生成的大块变化重新切回人类可以理解、可以审查、可以回滚的工程单元。
+Git 在 AI 编程时代的新价值，是把 AI 生成的大块改动，拆回人类能理解、能审查、能回滚的小块变更。
+
+想把这些日常操作放进同一个 timeout 修复案例，从任务契约一路看到候选 SHA、集成、制品和恢复，可以先读[一次工程变更，从任务契约走到恢复](engineering-change-course.md)。本文保持为日常分支、worktree、diff 和提交操作的速查。
 
 ## 1. 新风险
 
 AI 改代码通常有几个特点：
 
 - diff 变大，文件数量变多
-- 代码看起来合理，但行为边界可能被悄悄改掉
-- 测试可能只是覆盖了表面路径
+- 代码看起来合理，但原有行为可能被悄悄改掉
+- 测试可能只覆盖了最顺的路径
 - 抽象和命名可能脱离原项目习惯
 - 依赖、配置、生成文件容易被顺手带进去
 - 多个 Agent 并行时，分支和工作区容易互相污染
 
-所以 AI 编程后的 Git 工作流，重点是让变更重新变小、变清楚、可验证，不能只追求更快提交。
+所以 AI 编程后的 Git 工作流，重点是让变更重新变小、变清楚、可验证，不能只看生成和提交速度。
 
-不同 AI 工具的 Git 集成方式不同，但目标一致：把 AI 修改限制在可审查、可回滚的工程单元里。Codex 更强调远程环境和 sandbox，Claude Code 强调 worktree 隔离，Copilot Cloud Agent 更贴近 Issue 到 PR，Aider 则把本地 Git 提交和撤销作为核心体验。详细对比见 [AI 编程工具的 Git 集成实践](ai-coding-tools-git-integration.md)。
+不同 AI 工具接入 Git 的方式不同，但目标一致：把 AI 修改限制在可审查、可回滚的小范围内。Codex 更强调远程环境和 sandbox，Claude Code 强调 worktree 隔离，Copilot Cloud Agent 更贴近 Issue 到 PR，Aider 则把本地 Git 提交和撤销作为核心体验。详细对比见 [AI 编程工具的 Git 集成实践](ai-coding-tools-git-integration.md)。
 
 ## 2. 核心原则
 
@@ -54,9 +56,9 @@ git diff --stat
 - 编译
 - 静态检查
 - 本地手工回归
-- 线上前置验证说明
+- 上线前验证步骤
 
-### 人类负责合入
+### 合入决定由人负责
 
 AI 可以生成代码、解释 diff、做第一轮 Review，但最终合入决定必须由人类负责。
 
@@ -71,11 +73,17 @@ AI 可以生成代码、解释 diff、做第一轮 Review，但最终合入决�
 
 ## 3. 推荐工作流
 
-### 第 1 步：创建隔离分支
+### 第 1 步：确认基线并创建隔离分支
+
+`<integration-branch>` 表示团队约定的实际集成分支，例如 `main`、`master` 或 `develop`。先从仓库规则和 PR 目标确认它的名称，不能把 `main` 当作所有仓库的默认值。
+
+下面的流程要求当前工作区没有待处理编辑。`git status --porcelain` 只要有输出，就停止；保留现场，或在独立的干净 worktree 继续。不要在这个工作区执行 switch、pull、reset、restore 或 clean 来清掉别人的编辑。
 
 ```bash
-git switch main
-git pull --rebase
+git status --porcelain
+git branch --show-current
+git switch <integration-branch>
+git pull --rebase origin <integration-branch>
 git switch -c feat/ai-assisted-short-task
 ```
 
@@ -117,21 +125,28 @@ git diff
 
 ### 第 5 步：拆 commit
 
-用交互式暂存拆分变更：
+用交互式暂存拆分变更。它适合干净或隔离的任务工作区，先检查 `git diff --cached`，确认 Index 里只有本次意图：
 
 ```bash
 git add -p
 git commit -m "fix(auth): handle expired token"
 ```
 
-如果已经提交成一个大 commit，可以用：
+如果已经提交成一个大 commit，并且该 commit 尚未 push、未被协作者使用，可以重新拆分。先确认当前分支、最后一个 commit 和干净基线：
 
 ```bash
+git status --porcelain
+git log --oneline --decorate -2
 git reset --soft HEAD~1
+git reset
+git diff
 git add -p
+git diff --cached
 ```
 
-注意：只在本地未 push 的 commit 上这样做。
+`reset --soft` 会把原 commit 的全部改动留在 Index。紧接着运行 `git add -p` 没有可选择的未暂存 hunk，下一次普通 commit 会带上全部改动。第二个无参数 `git reset` 把 Index 还原到当前 `HEAD`，Working Tree 保持原样，随后 `git add -p` 才能只选本次 commit 的 hunk。
+
+`git status --porcelain` 有任何输出时，不要执行这两个 reset。已有 staged、unstaged 或 untracked 内容需要保留时，改用干净的任务 worktree。可运行的反例和修正流程见 [Git 命令安全回归](../labs/git-command-safety/README.md)。
 
 如果 AI 生成的是一个跨层大功能，可以考虑拆成一组有依赖关系的小 PR，让测试、实现、清理、文档分层进入 Review。详细见 [Stacked PR for AI-Generated Changes](stacked-pr-for-ai-generated-changes.md)。
 
@@ -154,7 +169,7 @@ pytest
 
 ```text
 请基于当前 git diff 做 Review。
-重点检查：行为边界、错误处理、兼容性、测试有效性、安全风险、无关改动。
+重点检查：行为范围、错误处理、兼容性、测试有效性、安全风险、无关改动。
 不要泛泛总结，只列出具体风险和文件位置。
 ```
 
@@ -275,8 +290,11 @@ ai/review-task-a
 ## 8. 示例流程
 
 ```bash
-git switch main
-git pull --rebase
+# <integration-branch> 由团队的仓库规则确定，例如 main、master 或 develop
+git status --porcelain
+# 预期没有输出；有输出时停止并保留现场
+git switch <integration-branch>
+git pull --rebase origin <integration-branch>
 git switch -c fix/order-timeout-validation
 
 # AI modifies files
